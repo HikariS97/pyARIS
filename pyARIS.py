@@ -4,7 +4,7 @@
 A python interface for ARIS files
 ===================================================
 
-Last modified on: February 7, 2021
+Last modified on: February 8, 2021
 The most recent version can be found at: https://github.com/EminentCodfish/pyARIS
 
 @author: Chris Rillahan
