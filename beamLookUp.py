@@ -10,7 +10,10 @@ Created on Fri Jan 06 15:06:17 2017
 @author: Rillahan
 """
 from bisect import bisect
+<<<<<<< HEAD
 import numpy as np
+=======
+>>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
                
 breakpoints128 = [-14.831,-14.596,-14.379,-14.162,-13.945,-13.728,-13.51,-13.293,-13.076,-12.852,-12.62,-12.388,
                 -12.156,-11.925,-11.693,-11.461,-11.23,-10.998,-10.766,-10.535,-10.303,-10.071,-9.839,-9.608,
@@ -53,7 +56,11 @@ def BeamLookUp(beam_angle, BeamCount):
     if BeamCount == 48:
         breakpoints = breakpoints48
         
+<<<<<<< HEAD
     beam = np.nan
+=======
+    beam = 999
+>>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
     if beam_angle > breakpoints[0]:
         if beam_angle <= breakpoints[-1]:
             beam = bisect(breakpoints, beam_angle)-1
