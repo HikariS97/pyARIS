@@ -1,15 +1,21 @@
 # -*- coding: utf-8 -*-
 """
 ===================================================
-Read ARIS files into python
+A python interface for ARIS files
 ===================================================
 
-Last modified on: December 20, 2016
+Last modified on: February 7, 2021
+The most recent version can be found at: https://github.com/EminentCodfish/pyARIS
 
-@author: Rillahan
+@author: Chris Rillahan
 """
-import struct, array, pytz, datetime
+import struct, array, pytz, datetime, tqdm, cv2
+import subprocess as sp
+from PIL import Image, ImageFont, ImageDraw
 import numpy as np
+import beamLookUp
+
+#print __doc__
 
 class ARIS_File:
     'This is a class container for the ARIS file headers'
@@ -90,7 +96,7 @@ class ARIS_File:
         print('Samples/Beam: ' + str(self.SamplesPerChannel))
 
 class ARIS_Frame(ARIS_File):
-    'This is a class container for the ARIS frame data' 
+    """This is a class container for the ARIS frame dataPI""" 
 
     def __init__(self, frameindex, frametime, version, status, sonartimestamp, tsday, tshour, tsminute, tssecond, tshsecond, transmitmode,
                  windowstart, windowlength, threshold, intensity, receivergain, degc1, degc2, humidity, focus, battery, uservalue1, uservalue2, 
@@ -285,9 +291,36 @@ class ARIS_Frame(ARIS_File):
         print('Frequency: ' + str(self.frequencyhilow))
                     
 
-def DataImport(filename):
-    data = open(filename, 'rb')
-
+def DataImport(filename, startFrame = 1, frameBuffer = 0):
+    """DataImport reads in the file specified by the filename.  The function populates
+    a ARIS_File data structure.  This function then calls the FrameRead() method
+    to load a starting frame.
+    
+    Parameters
+    -----------
+    filename    : Input file (*.aris)
+    startFrame  : The first frame to be populated into the data structure
+    frameBuffer : This parameter is passed into the FrameRead method.  It adds a 
+        specified number of pixels around the edges of the remapped frame.   
+    
+    Returns
+    -------
+    output_data : a ARIS_File data structure   
+    frame : An ARIS_Frame data structure
+        
+    Notes
+    -------
+    Basic frame attributes can be found by calling the file.info() method.
+    A list of all the frames attributes can be found by using dir(file), some
+        of these may or may not be used by the ARIS.
+    """  
+    
+    try:
+        data = open(filename, 'rb')
+    except:
+        print('File Error: An error occurred trying to read the file.')
+        raise
+        
     #Start reading file header
     version_number      = struct.unpack('I', data.read(4))[0]
     FrameCount          = struct.unpack('I', data.read(4))[0]
@@ -340,12 +373,43 @@ def DataImport(filename):
     
     #Close data file
     data.close()
+    
+    #Create an empty container for the lookup table
+    output_data.LUT = False
+    output_data.map_y = None
+    output_data.map_x = None
+    
+    #Load the first frame
+    #frame = FrameRead(output_data, startFrame)
                  
     #Return the data structure
+    #return output_data, frame
     return output_data
-    
-def FrameRead(ARIS_data, frameIndex):
 
+#@profile
+def FrameRead(ARIS_data, frameIndex, frameBuffer = None):
+    """The FrameRead function loads in the specified frame data from the raw ARIS data.  
+    The function then calls the remapARIS() function which remaps the raw data into 
+    a 2D real world projection.
+    
+    Parameters
+    -----------
+    ARIS_data : ARIS data structure returned via pyARIS.DataImport()
+    frameIndex : frame number
+    frameBuffer : This parameter add a specified number of pixels around the edges
+                    of the remapped frame.   
+    
+    Returns
+    -------
+    output : a frame data structure    
+        
+    Notes
+    -------
+    Basic frame attributes can be found by calling the frame.info() method.
+    A list of all the frames attributes can be found by using dir(frame), some
+        of these may or may not be used by the ARIS.
+    """    
+    
     FrameSize = ARIS_data.NumRawBeams*ARIS_data.SamplesPerChannel
         
     frameoffset = (1024+(frameIndex*(1024+(FrameSize))))
@@ -535,25 +599,291 @@ def FrameRead(ARIS_data, frameIndex):
                  tiltmotorerrorcode, rollmotorerrorcode, panabsposition, tiltabsposition, rollabsposition, panaccelx, panaccely, panaccelz, tiltaccelx, 
                  tiltaccely, tiltaccelz, rollaccelx, rollaccely, rollaccelz, appliedsettings, constrainedsettings, invalidsettings, enableinterpacketdelay,
                  interpacketdelayperiod, uptime, arisappversionmajor, arisappversionminor, gotime, panvelocity, tiltvelocity, rollvelocity, sentinel)
+        
     
     #Add the frame data
-    if pingmode == 9:
+    if pingmode in [1,2]:
+        ARIS_Frame.BeamCount = 48
+    if pingmode in [3,4,5]:
+        ARIS_Frame.BeamCount = 96
+    if pingmode in [6,7,8]:
+        ARIS_Frame.BeamCount = 64
+    if pingmode in [9,10,11,12]:
         ARIS_Frame.BeamCount = 128
     
     data.seek(frameoffset+1024, 0)
-    frame = np.empty([samplesperbeam, ARIS_Frame.BeamCount], dtype=float)
-    for r in range(len(frame)):
-        for c in range(len(frame[r])):
-            frame[r][c] = struct.unpack('B', data.read(1))[0]
-    frame = np.fliplr(frame)
+    #print('samples per beam: ', samplesperbeam)
+    #print('Beam Count: ', ARIS_Frame.BeamCount)
+    
+    frame = np.ndarray((samplesperbeam, ARIS_Frame.BeamCount), '<B', data.read(samplesperbeam*ARIS_Frame.BeamCount))
     
     #Remap the data from 0-255 to 0-80 dB
-    remap = lambda t: (t * 80)/255
-    vfunc = np.vectorize(remap)
-    frame = vfunc(frame)
+    #remap = lambda t: (t * 80)/255
+    #vfunc = np.vectorize(remap)
+    #frame = vfunc(frame)
     
     output.frame_data = frame
+    output.WinStart = output.samplestartdelay * 0.000001 * output.soundspeed / 2
     
-    data.close()
+    #Close the data file
+    data.close()    
+    
+    #Create the lookup table if not present
+    if ARIS_data.LUT == False:
+        LUT(ARIS_data, output)
+        ARIS_data.LUT = True
+    
+    #Remap the frame
+    remapARIS2(ARIS_data, output, frameBuffer)
     
     return output
+    
+'''Data remapping functions'''
+
+def getXY(beamnum, binnum, frame):
+    #WinStart = frame.samplestartdelay * 0.000001 * frame.soundspeed / 2
+    bin_dist = frame.WinStart + frame.sampleperiod * binnum * 0.000001 * frame.soundspeed / 2
+    beam_angle = beamLookUp.beamAngle(beamnum, frame.BeamCount)
+    x = bin_dist*np.sin(np.deg2rad(-beam_angle))
+    y = bin_dist*np.cos(np.deg2rad(-beam_angle))
+    return x, y
+
+def getBeamBin(x,y, frame):
+    #WinStart = frame.samplestartdelay * 0.000001 * frame.soundspeed / 2
+    angle = np.rad2deg(np.tan(x/y))
+    hyp = y/np.cos(np.deg2rad(angle))
+    binnum2 = int((2*(hyp-frame.WinStart))/(frame.sampleperiod * 0.000001 * frame.soundspeed))
+    beamnum = beamLookUp.BeamLookUp(-angle, frame.BeamCount)
+    return beamnum, binnum2
+    
+def px2Meters(x,y, frame, xdim = None):
+    #WinStart = frame.samplestartdelay * 0.000001 * frame.soundspeed / 2
+    pix2Meter = frame.sampleperiod * 0.000001 * frame.soundspeed / 2
+    if xdim == None:
+        xdim = int(getXY(0,frame.samplesperbeam, frame)[0]*(1/pix2Meter)*2)
+    x1 = (x - xdim/2) * pix2Meter #Convert X pixel to X dimension
+    y1 = (y*pix2Meter)+(frame.WinStart) #Convert Y pixel to y dimension
+    return x1, y1    
+
+def createLUP(ARISFile, frame):
+    '''This method is depreciated.  Use the function LUT() instead'''
+    #Lookup dimensions
+    SampleLength = frame.sampleperiod * 0.000001 * frame.soundspeed / 2
+    ARISFile.ydim = int(frame.samplesperbeam)
+    ARISFile.xdim = int(getXY(0,frame.samplesperbeam, frame)[0]*(1/SampleLength)*2)
+
+    LUP = {}
+
+    #Iterate through each point in the frame and lookup data
+    for x in range(ARISFile.xdim):
+        for y in range(ARISFile.ydim):
+            x1, y1 = px2Meters(x, y, frame, xdim = ARISFile.xdim)
+            Beam, Bin = getBeamBin(x1, y1, frame)
+            if Beam != 999:
+                if Bin < frame.samplesperbeam:
+                    LUP[(x, y)] = (Bin, Beam)
+                
+    ARISFile.LUP = LUP
+
+def getBeam(x, y, beamcount):
+    angle = np.rad2deg(np.tan(x/y))
+    beamnum = beamLookUp.BeamLookUp(-angle, beamcount)
+    return beamnum
+
+getBeamVec = np.vectorize(getBeam)
+
+def getBin(x,y, winstart, sampleperiod, soundspeed):
+    angle = np.rad2deg(np.tan(x/y))
+    hyp = y/np.cos(np.deg2rad(angle))
+    binnum2 = int((2*(hyp-winstart))/(sampleperiod * 0.000001 * soundspeed))
+    return binnum2
+
+getBinVec = np.vectorize(getBin)
+
+#@profile
+def LUT(ARISFile, frame):
+    """The LUT function creates a lookup table which is subsequently used to 
+    remap the sonar data from beams and bins to x, y spatial coordinates.  
+    
+    Parameters
+    -----------
+    ARISFile : ARIS data structure returned via pyARIS.DataImport()
+    frame : A ARIS frame class object
+    
+    Returns
+    -------
+    output : an x_map and y_map will be added to the ARISFile class object   
+        
+    Notes
+    -------
+    Basic frame attributes can be found by calling the frame.info() method.
+    A list of all the frames attributes can be found by using dir(frame), some
+        of these may or may not be used by the ARIS.
+    """    
+    #Lookup dimensions
+    SampleLength = frame.sampleperiod * 0.000001 * frame.soundspeed / 2
+    ARISFile.ydim = int(frame.samplesperbeam)
+    ARISFile.xdim = int(getXY(0,frame.samplesperbeam, frame)[0]*(1/SampleLength)*2)
+    
+    #Convert from the images pixel space to real world coordinates in meters
+    x = np.arange(ARISFile.xdim)
+    y = np.arange(ARISFile.ydim)
+    
+    pix2Meter = frame.sampleperiod * 0.000001 * frame.soundspeed / 2
+    
+    x1 = (x - ARISFile.xdim/2) * pix2Meter
+    y1 = y1 = (y*pix2Meter)+(frame.WinStart)
+    
+    #Create a matrix in real-world coordinates with the sonar located at 0,0
+    xx, yy = np.meshgrid(x1, y1)
+    
+    #Use the getBeamVec function to return the map_x
+    beamcount = frame.BeamCount
+    beams = getBeamVec(xx, yy, beamcount)
+    
+    #Create a map_y based on the bin locations
+    winstart = frame.WinStart
+    sampleperiod = frame.sampleperiod
+    soundspeed = frame.soundspeed
+    bins = getBinVec(xx, yy, winstart, sampleperiod, soundspeed)
+    
+    #Clip the map_y mask 
+    bins = bins.astype(np.float32)   
+    mask = np.isnan(beams)
+    bins[mask] = beams[mask]    
+    
+    #Embed the maps in the ARISFile object
+    ARISFile.map_y = bins
+    ARISFile.map_x = beams.astype(np.float32)
+
+#@profile
+def remapARIS(ARISFile, frame, frameBuffer = None): 
+    """
+    Deprecated.  Use remapARIS2 for improved speed.
+    
+    This function remaps the pixels from the bin/beam format to a 2D real world
+    format with pixel resolution equal to the SampleLength.
+    
+    Parameters
+    -----------
+    ARISFile : ARIS data structure returned via pyARIS.DataImport()
+    frame : frame number to be remapped
+    frameBuffer : This parameter add a specified number of pixels around the edges.   
+    
+    Returns
+    -------
+    A remapped frame which is stored in the frames data structure as frame.remap    
+    """               
+    #Create an empty frame
+    Remap = np.empty([ARISFile.xdim,ARISFile.ydim])
+    
+    #Populate the empty frame
+    for key in ARISFile.LUP:
+        Remap[key[0],key[1]] = frame.frame_data[ARISFile.LUP[key][0], ARISFile.LUP[key][1]]
+        
+    Remap = np.rot90(Remap, 1)
+    
+    #Add buffer is requested
+    if frameBuffer != None:
+        buffY = int(ARISFile.ydim*frameBuffer)
+        buffX = int(ARISFile.xdim*frameBuffer)
+        Remap = np.concatenate((np.ones([ARISFile.ydim, buffX]), Remap, np.ones([ARISFile.ydim, buffX])), axis = 1)
+        Remap = np.concatenate((np.ones([buffY,ARISFile.xdim+buffX*2]), Remap, np.ones([buffY,ARISFile.xdim+buffX*2])))
+        
+    #Add to frame data
+    frame.remap = Remap.astype('uint8')
+    
+def remapARIS2(ARISFile, frame, frameBuffer = None):
+    """This function remaps the pixels from the bin/beam format to a 2D real world
+    format with pixel resolution equal to the SampleLength.
+    
+    Parameters
+    -----------
+    ARISFile : ARIS data structure returned via pyARIS.DataImport()
+    frame : frame number to be remapped
+    frameBuffer : This parameter add a specified number of pixels around the edges.   
+    
+    Returns
+    -------
+    A remapped frame which is stored in the frames data structure as frame.remap    
+    """       
+    #Create an empty frame
+    Remap = np.zeros([ARISFile.ydim, ARISFile.xdim])
+    
+    #Use OpenCV's remap fucntion to populate the empty frame
+    Remap = cv2.remap(frame.frame_data, ARISFile.map_x, ARISFile.map_y, cv2.INTER_NEAREST)
+        
+    Remap = np.flipud(Remap)
+    
+    #Add buffer is requested
+    if frameBuffer != None:
+        buffY = int(ARISFile.ydim*frameBuffer)
+        buffX = int(ARISFile.xdim*frameBuffer)
+        Remap = np.concatenate((np.ones([ARISFile.ydim, buffX]), Remap, np.ones([ARISFile.ydim, buffX])), axis = 1)
+        Remap = np.concatenate((np.ones([buffY,ARISFile.xdim+buffX*2]), Remap, np.ones([buffY,ARISFile.xdim+buffX*2])))
+        
+    #Add to frame data
+    frame.remap = Remap.astype('uint8')
+    
+    
+def VideoExport(data, filename, fps = 24.0, start_frame = 1, end_frame = None, timestamp = False, fontsize = 30, ts_pos = (0,0)):
+    """Output video using the ffmpeg pipeline. The current implementation 
+    outputs compresses png files and outputs a mp4.
+    
+    Parameters
+    -----------
+    data : (Str) ARIS data structure returned via pyARIS.DataImport()
+    filename : (Str) output filename.  Must include file extension (i.e. 'video.mp4')
+    fps : (Float) Output video frame rate (frames per second). Default = 24 fps
+    start_frame, end_frame : (Int) Range of frames included in the output video 
+    timestamp : (Bool) Add the timestamp from the sonar to the video frames
+    fontsize : (Int) Size of timestamp font 
+    ts_pos : (Tuple) (x,y) location of the timestamp
+    
+    Returns
+    -------
+    Returns a video into the current working directory
+    
+    Notes
+    ------
+    Currently this function looks for ffmpeg.exe in the current working directory.
+    Must have the '*.mp4' file extension.
+    Uses the tqdm package to display a status bar.
+    
+    Example
+    -------
+    >>> pyARIS.VideoExport(data, 'test_video.mp4', fps = 24)
+    
+    """
+    
+    #Command to send via the command prompt which specifies the pipe parameters
+    command = ['ffmpeg.exe',
+           '-y', # (optional) overwrite output file if it exists
+           '-f', 'image2pipe',
+           '-vcodec','mjpeg',
+           '-r', '1',
+#           '-s', '793x1327', # size of one frame
+           '-r', str(fps), # frames per second
+           '-i', '-', # The input comes from a pipe
+           '-an', # Tells FFMPEG not to expect any audio
+           '-vcodec', 'mpeg4',
+           filename]
+
+    #Open the pipe
+    pipe = sp.Popen(command, stdin=sp.PIPE)
+
+    if end_frame == None:
+        end_frame = data.FrameCount
+ 
+    #Iterate through the dataframes and push to pipe       
+    for i in tqdm.tqdm(range(start_frame-1, end_frame)):
+        frame = FrameRead(data, i)
+        im = Image.fromarray(frame.remap)
+        if timestamp == True:
+            ts = str(datetime.datetime.fromtimestamp(frame.sonartimestamp/1000000, pytz.timezone('UTC')).strftime('%Y-%m-%d %H:%M:%S'))
+            draw = ImageDraw.Draw(im)
+            font = ImageFont.truetype("./arial.ttf", fontsize)
+            draw.text(ts_pos,ts,font=font, fill = 'white')
+        im.save(pipe.stdin, 'JPEG')
+
+    pipe.stdin.close()

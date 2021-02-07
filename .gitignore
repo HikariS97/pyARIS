@@ -4,5 +4,38 @@
 #ignore Nils Matlab files folder
 /ARISreader-master
 
+#ignore old files
+/Old_Files
+/__pycache__
+
 #ignore *.aris files
 *.aris
+
+#ignore *.spyderworkspace config file
+*.spyderworkspace
+
+#ignore compile python files
+*.pyc
+
+#ignore ffmpeg
+ffmpeg.exe
+
+#ignore any mp4 files
+*.mp4
+
+#Ignore any image files
+*.png
+*.jpg
+
+#Ignore compiled files
+*.pyc
+
+#Ignore any profiling files
+*.lprof
+
+#Ignore my test files
+ARIS_Read.py
+ARIS_FG_Filewalker.py
+ARIS_2021_Working_File.py
+ARIS_Tracker.py
+ARIS_2021_Working_File
