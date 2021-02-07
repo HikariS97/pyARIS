@@ -383,7 +383,6 @@ def DataImport(filename, startFrame = 1, frameBuffer = 0):
     return output_data
 
 #@profile
-=======
     output_data.LUP = None
     
     #Load the first frame
