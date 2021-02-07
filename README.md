@@ -10,8 +10,9 @@ in 128 beam mode.  It should work with other versions, but they have yet to
 be tested.  This package currently doesn't support the tele-photo len.
 
 ### Requirements
-* Python (2.7.10)
-* Numpy (1.10.1) 
+* Python (3.0)
+* OpenCV (3.4.2)
+* Numpy (1.19.2) 
 * PIL (1.1.7)
 * tqdm (4.11.2)
 * Pytz (2015.4)

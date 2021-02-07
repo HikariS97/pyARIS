@@ -4,20 +4,12 @@
 A python interface for ARIS files
 ===================================================
 
-<<<<<<< HEAD
 Last modified on: February 8, 2021
-=======
-Last modified on: January 31, 2017
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
 The most recent version can be found at: https://github.com/EminentCodfish/pyARIS
 
 @author: Chris Rillahan
 """
-<<<<<<< HEAD
 import struct, array, pytz, datetime, tqdm, cv2
-=======
-import struct, array, pytz, datetime, tqdm
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
 import subprocess as sp
 from PIL import Image, ImageFont, ImageDraw
 import numpy as np
@@ -383,16 +375,11 @@ def DataImport(filename, startFrame = 1, frameBuffer = 0):
     data.close()
     
     #Create an empty container for the lookup table
-<<<<<<< HEAD
     output_data.LUT = False
     output_data.map_y = None
     output_data.map_x = None
-    
-    #Load the first frame
-    #frame = FrameRead(output_data, startFrame)
                  
     #Return the data structure
-    #return output_data, frame
     return output_data
 
 #@profile
@@ -405,7 +392,6 @@ def DataImport(filename, startFrame = 1, frameBuffer = 0):
     #Return the data structure
     return output_data, frame
     
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
 def FrameRead(ARIS_data, frameIndex, frameBuffer = None):
     """The FrameRead function loads in the specified frame data from the raw ARIS data.  
     The function then calls the remapARIS() function which remaps the raw data into 
@@ -647,7 +633,6 @@ def FrameRead(ARIS_data, frameIndex, frameBuffer = None):
     #Close the data file
     data.close()    
     
-<<<<<<< HEAD
     #Create the lookup table if not present
     if ARIS_data.LUT == False:
         LUT(ARIS_data, output)
@@ -655,14 +640,6 @@ def FrameRead(ARIS_data, frameIndex, frameBuffer = None):
     
     #Remap the frame
     remapARIS2(ARIS_data, output, frameBuffer)
-=======
-    #Create the lookup table
-    if ARIS_data.LUP == None:
-        createLUP(ARIS_data, output)
-    
-    #Remap the first frame
-    remapARIS(ARIS_data, output, frameBuffer)
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
     
     return output
     
@@ -694,10 +671,7 @@ def px2Meters(x,y, frame, xdim = None):
     return x1, y1    
 
 def createLUP(ARISFile, frame):
-<<<<<<< HEAD
     '''This method is depreciated.  Use the function LUT() instead'''
-=======
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
     #Lookup dimensions
     SampleLength = frame.sampleperiod * 0.000001 * frame.soundspeed / 2
     ARISFile.ydim = int(frame.samplesperbeam)
@@ -716,7 +690,6 @@ def createLUP(ARISFile, frame):
                 
     ARISFile.LUP = LUP
 
-<<<<<<< HEAD
 def getBeam(x, y, beamcount):
     angle = np.rad2deg(np.tan(x/y))
     beamnum = beamLookUp.BeamLookUp(-angle, beamcount)
@@ -829,12 +802,6 @@ def remapARIS2(ARISFile, frame, frameBuffer = None):
     """This function remaps the pixels from the bin/beam format to a 2D real world
     format with pixel resolution equal to the SampleLength.
     
-=======
-def remapARIS(ARISFile, frame, frameBuffer = None): 
-    """This function remaps the pixels from the bin/beam format to a 2D real world
-    format with pixel resolution equal to the SampleLength.
-    
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
     Parameters
     -----------
     ARISFile : ARIS data structure returned via pyARIS.DataImport()
@@ -843,8 +810,7 @@ def remapARIS(ARISFile, frame, frameBuffer = None):
     
     Returns
     -------
-    A remapped frame which is stored in the frames data structure as frame.remap    
-<<<<<<< HEAD
+    A remapped frame which is stored in the frames data structure as frame.remap   
     """       
     #Create an empty frame
     Remap = np.zeros([ARISFile.ydim, ARISFile.xdim])
@@ -853,17 +819,6 @@ def remapARIS(ARISFile, frame, frameBuffer = None):
     Remap = cv2.remap(frame.frame_data, ARISFile.map_x, ARISFile.map_y, cv2.INTER_NEAREST)
         
     Remap = np.flipud(Remap)
-=======
-    """               
-    #Create an empty frame
-    Remap = np.zeros([ARISFile.xdim,ARISFile.ydim])
-    
-    #Populate the empty frame
-    for key in ARISFile.LUP:
-        Remap[key[0],key[1]] = frame.frame_data[ARISFile.LUP[key][0], ARISFile.LUP[key][1]]
-        
-    Remap = np.rot90(Remap, 1)
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
     
     #Add buffer is requested
     if frameBuffer != None:
@@ -875,10 +830,6 @@ def remapARIS(ARISFile, frame, frameBuffer = None):
     #Add to frame data
     frame.remap = Remap.astype('uint8')
     
-<<<<<<< HEAD
-    
-=======
->>>>>>> a5a1429efb1d1e1387741cfc295c3782fccfab5e
 def VideoExport(data, filename, fps = 24.0, start_frame = 1, end_frame = None, timestamp = False, fontsize = 30, ts_pos = (0,0)):
     """Output video using the ffmpeg pipeline. The current implementation 
     outputs compresses png files and outputs a mp4.
